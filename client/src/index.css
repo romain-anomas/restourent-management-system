@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply bg-gray-50 text-ink-900 antialiased;
+}
+
+/* Prevent any accidental horizontal overflow on mobile */
+html, body {
+  overflow-x: hidden;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
