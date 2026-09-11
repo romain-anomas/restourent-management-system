@@ -4,9 +4,8 @@ const asyncHandler = require('../utils/asyncHandler');
 /**
  * GET /api/dashboard - admin only.
  * Returns today's snapshot, inventory health, and chart-ready series.
- * Expenses are not yet tracked (Phase 10), so estimatedProfit currently
- * subtracts only cost-of-goods-sold from revenue - it will incorporate
- * real expenses once that module exists.
+ * Expenses are tracked via the expenses table (Phase 10) and included
+ * in this month's estimatedProfit calculation below.
  */
 const getDashboard = asyncHandler(async (req, res) => {
   const [
@@ -85,7 +84,12 @@ const getDashboard = asyncHandler(async (req, res) => {
 
   const monthRevenueValue = Number(monthRevenue.revenue);
   const cogs = Number(cogsRow.cogs);
-  const expensesThisMonth = 0; // Phase 10 will populate this from the expenses table
+
+  const [[expensesRow]] = await pool.query(
+    `SELECT COALESCE(SUM(amount),0) AS total FROM expenses
+     WHERE YEAR(expense_date) = YEAR(CURDATE()) AND MONTH(expense_date) = MONTH(CURDATE())`
+  );
+  const expensesThisMonth = Number(expensesRow.total);
   const estimatedProfit = monthRevenueValue - cogs - expensesThisMonth;
 
   res.json({

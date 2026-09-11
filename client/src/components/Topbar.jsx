@@ -2,6 +2,7 @@ import { FiMenu, FiLogOut } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
+import NotificationBell from './NotificationBell';
 
 export default function Topbar({ onMenuClick }) {
   const { user, logout } = useAuth();
@@ -31,6 +32,7 @@ export default function Topbar({ onMenuClick }) {
       <div className="hidden lg:block" />
 
       <div className="flex items-center gap-3">
+        <NotificationBell />
         <div className="text-right hidden sm:block">
           <p className="text-sm font-semibold text-ink-900 leading-tight">{user?.fullName}</p>
           <p className="text-xs capitalize text-gray-500 leading-tight">{user?.role}</p>

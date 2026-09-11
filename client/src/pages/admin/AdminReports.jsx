@@ -190,20 +190,22 @@ export default function AdminReports() {
               {report.productsSold.length === 0 ? (
                 <p className="py-6 text-center text-sm text-gray-400">No sales in this period.</p>
               ) : (
-                <table className="w-full text-sm">
-                  <thead className="text-left text-xs uppercase text-gray-400">
-                    <tr><th className="pb-2">Product</th><th className="pb-2">Qty</th><th className="pb-2 text-right">Revenue</th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {report.productsSold.map((p, i) => (
-                      <tr key={i}>
-                        <td className="py-1.5">{p.name}</td>
-                        <td className="py-1.5">{p.quantity}</td>
-                        <td className="py-1.5 text-right">{formatMoney(p.revenue)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[320px] text-sm">
+                    <thead className="text-left text-xs uppercase text-gray-400">
+                      <tr><th className="pb-2">Product</th><th className="pb-2">Qty</th><th className="pb-2 text-right">Revenue</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {report.productsSold.map((p, i) => (
+                        <tr key={i}>
+                          <td className="py-1.5">{p.name}</td>
+                          <td className="py-1.5">{p.quantity}</td>
+                          <td className="py-1.5 text-right">{formatMoney(p.revenue)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
 
@@ -212,19 +214,21 @@ export default function AdminReports() {
               {report.workerActivity.length === 0 ? (
                 <p className="py-6 text-center text-sm text-gray-400">No worker activity in this period.</p>
               ) : (
-                <table className="w-full text-sm">
-                  <thead className="text-left text-xs uppercase text-gray-400">
-                    <tr><th className="pb-2">Worker</th><th className="pb-2 text-right">Actions</th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {report.workerActivity.map((w, i) => (
-                      <tr key={i}>
-                        <td className="py-1.5">{w.worker_name}</td>
-                        <td className="py-1.5 text-right">{w.actions}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[240px] text-sm">
+                    <thead className="text-left text-xs uppercase text-gray-400">
+                      <tr><th className="pb-2">Worker</th><th className="pb-2 text-right">Actions</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {report.workerActivity.map((w, i) => (
+                        <tr key={i}>
+                          <td className="py-1.5">{w.worker_name}</td>
+                          <td className="py-1.5 text-right">{w.actions}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </div>

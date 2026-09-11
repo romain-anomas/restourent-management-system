@@ -19,6 +19,9 @@ const workerStockRoutes = require('./routes/workerStockRoutes');
 const salaryDeductionRoutes = require('./routes/salaryDeductionRoutes');
 const invoiceRoutes = require('./routes/invoiceRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const expenseRoutes = require('./routes/expenseRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const activityRoutes = require('./routes/activityRoutes');
 
 const app = express();
 
@@ -68,10 +71,9 @@ app.use('/api/worker-stock', workerStockRoutes);
 app.use('/api/salary-deductions', salaryDeductionRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/reports', reportRoutes);
-
-// Future phases will add:
-// app.use('/api/expenses', expenseRoutes);
-// app.use('/api/notifications', notificationRoutes);
+app.use('/api/expenses', expenseRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/activity', activityRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

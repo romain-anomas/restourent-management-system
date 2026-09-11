@@ -3,7 +3,6 @@ import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import ComingSoon from './components/ComingSoon';
 
 // Public
 import PublicLayout from './layouts/PublicLayout';
@@ -31,6 +30,9 @@ import AdminWorkerStock from './pages/admin/AdminWorkerStock';
 import AdminSalaryDeductions from './pages/admin/AdminSalaryDeductions';
 import AdminInvoices from './pages/admin/AdminInvoices';
 import AdminReports from './pages/admin/AdminReports';
+import AdminExpenses from './pages/admin/AdminExpenses';
+import AdminNotifications from './pages/admin/AdminNotifications';
+import AdminSettings from './pages/admin/AdminSettings';
 
 // Worker
 import WorkerLayout from './layouts/WorkerLayout';
@@ -38,6 +40,7 @@ import WorkerDashboard from './pages/worker/WorkerDashboard';
 import WorkerOrders from './pages/worker/WorkerOrders';
 import WorkerInventory from './pages/worker/WorkerInventory';
 import WorkerStockTaking from './pages/worker/WorkerStockTaking';
+import WorkerActivity from './pages/worker/WorkerActivity';
 
 export default function App() {
   return (
@@ -77,11 +80,11 @@ export default function App() {
             <Route path="workers" element={<AdminWorkers />} />
             <Route path="worker-stock" element={<AdminWorkerStock />} />
             <Route path="salary-deductions" element={<AdminSalaryDeductions />} />
-            <Route path="expenses" element={<ComingSoon title="Expenses" />} />
+            <Route path="expenses" element={<AdminExpenses />} />
             <Route path="invoices" element={<AdminInvoices />} />
             <Route path="reports" element={<AdminReports />} />
-            <Route path="notifications" element={<ComingSoon title="Notifications" />} />
-            <Route path="settings" element={<ComingSoon title="Settings" />} />
+            <Route path="notifications" element={<AdminNotifications />} />
+            <Route path="settings" element={<AdminSettings />} />
             <Route path="profile" element={<Profile />} />
           </Route>
 
@@ -98,9 +101,9 @@ export default function App() {
             <Route path="orders" element={<WorkerOrders />} />
             <Route path="inventory" element={<WorkerInventory />} />
             <Route path="stock-taking" element={<WorkerStockTaking />} />
-            <Route path="activity" element={<ComingSoon title="My Activity" />} />
+            <Route path="activity" element={<WorkerActivity />} />
             <Route path="profile" element={<Profile />} />
-            <Route path="settings" element={<ComingSoon title="Settings" />} />
+            <Route path="settings" element={<Profile />} />
           </Route>
 
           {/* ---------- Fallbacks ---------- */}

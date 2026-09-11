@@ -66,6 +66,10 @@ async function generateReport(from, to) {
        GROUP BY u.full_name ORDER BY actions DESC LIMIT 10`,
       [from, to]
     ),
+    pool.query(
+      `SELECT COALESCE(SUM(amount),0) AS total FROM expenses WHERE expense_date BETWEEN ? AND ?`,
+      [from, to]
+    ),
   ]);
 
   // Each result is a [rows, fields] tuple from mysql2 - take rows ([0]) from each.
@@ -78,10 +82,11 @@ async function generateReport(from, to) {
   const adjustments = results[6][0][0];
   const workerTakings = results[7][0][0];
   const workerActivity = results[8][0];
+  const expensesRow = results[9][0][0];
 
   const revenue = Number(revenueRow.revenue);
   const cogs = Number(cogsRow.cogs);
-  const expenses = 0; // Phase 10 will populate this from the expenses table
+  const expenses = Number(expensesRow.total);
   const estimatedProfit = revenue - cogs - expenses;
 
   return {
