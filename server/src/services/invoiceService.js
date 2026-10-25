@@ -68,99 +68,129 @@ async function getInvoiceById(invoiceId, conn = pool) {
   return { ...invoice, items, restaurant: settingsRows[0] || {} };
 }
 
-/**
- * Builds a single-page A4 invoice PDF from invoice data (as returned by
- * getInvoiceById) and returns it as a Buffer, ready to stream to the client.
- */
+/** Builds a variable-length 80 mm receipt invoice, suitable for thermal printers. */
 async function buildInvoicePdf(invoice) {
   const doc = await PDFDocument.create();
-  const page = doc.addPage([595.28, 841.89]); // A4 in points
-  const { width, height } = page.getSize();
-
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-
-  const margin = 50;
-  let y = height - margin;
-  const brandColor = rgb(0.92, 0.34, 0.05); // matches the app's brand-600 orange
+  const width = (80 / 25.4) * 72;
+  const margin = 13;
+  const contentWidth = width - margin * 2;
+  const brandColor = rgb(0.92, 0.34, 0.05);
   const gray = rgb(0.45, 0.45, 0.45);
   const darkText = rgb(0.1, 0.1, 0.1);
-
-  const drawText = (text, x, yPos, opts = {}) => {
-    page.drawText(String(text ?? ''), { x, y: yPos, size: opts.size || 10, font: opts.bold ? bold : font, color: opts.color || darkText });
+  const rulesColor = rgb(0.78, 0.78, 0.78);
+  const operations = [];
+  const pushText = (value, options = {}) => {
+    const text = String(value ?? '');
+    const size = options.size || 9;
+    const selectedFont = options.bold ? bold : font;
+    const words = text.split(/\s+/).filter(Boolean);
+    const wrapped = [];
+    let current = '';
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (selectedFont.widthOfTextAtSize(candidate, size) <= contentWidth) {
+        current = candidate;
+        continue;
+      }
+      if (current) wrapped.push(current);
+      current = '';
+      for (const char of word) {
+        const next = current + char;
+        if (selectedFont.widthOfTextAtSize(next, size) > contentWidth && current) {
+          wrapped.push(current);
+          current = char;
+        } else current = next;
+      }
+    }
+    if (current) wrapped.push(current);
+    if (!wrapped.length) wrapped.push('');
+    wrapped.forEach((line) => operations.push({
+      type: 'text', text: line, size, font: selectedFont,
+      color: options.color || darkText, align: options.align || 'left', gap: options.gap ?? 2,
+    }));
   };
-
-  // Header: restaurant info (left) + invoice meta (right)
-  drawText(invoice.restaurant.restaurant_name || 'Restaurant', margin, y, { size: 18, bold: true, color: brandColor });
-  y -= 18;
-  if (invoice.restaurant.address) { drawText(invoice.restaurant.address, margin, y, { size: 9, color: gray }); y -= 12; }
-  if (invoice.restaurant.phone) { drawText(`Tel: ${invoice.restaurant.phone}`, margin, y, { size: 9, color: gray }); y -= 12; }
-  if (invoice.restaurant.email) { drawText(invoice.restaurant.email, margin, y, { size: 9, color: gray }); y -= 12; }
-
-  const rightX = width - margin - 180;
-  let ry = height - margin;
-  drawText('INVOICE', rightX, ry, { size: 16, bold: true }); ry -= 18;
-  drawText(`Invoice #: ${invoice.invoice_number}`, rightX, ry, { size: 9, color: gray }); ry -= 12;
-  drawText(`Order #: ${invoice.order_number}`, rightX, ry, { size: 9, color: gray }); ry -= 12;
-  drawText(`Date: ${new Date(invoice.created_at).toLocaleDateString()}`, rightX, ry, { size: 9, color: gray }); ry -= 12;
-  drawText(`Payment: ${invoice.payment_status.toUpperCase()}`, rightX, ry, { size: 9, color: gray });
-
-  y -= 25;
-  page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 1, color: rgb(0.85, 0.85, 0.85) });
-  y -= 25;
-
-  // Bill to
-  drawText('Bill To', margin, y, { size: 10, bold: true }); y -= 14;
-  drawText(invoice.customer_name, margin, y, { size: 10 }); y -= 13;
-  drawText(invoice.customer_phone, margin, y, { size: 9, color: gray }); y -= 13;
-  if (invoice.customer_address) { drawText(invoice.customer_address, margin, y, { size: 9, color: gray }); y -= 13; }
-
-  y -= 15;
-
-  // Items table header
-  const col = { name: margin, qty: 330, price: 400, total: 480 };
-  page.drawRectangle({ x: margin, y: y - 6, width: width - margin * 2, height: 22, color: rgb(0.97, 0.97, 0.97) });
-  drawText('Item', col.name + 5, y, { size: 9, bold: true });
-  drawText('Qty', col.qty, y, { size: 9, bold: true });
-  drawText('Unit Price', col.price, y, { size: 9, bold: true });
-  drawText('Total', col.total, y, { size: 9, bold: true });
-  y -= 24;
-
+  const pushPair = (label, value, options = {}) => {
+    const size = options.size || 9;
+    const selectedFont = options.bold ? bold : font;
+    const left = String(label);
+    const right = String(value ?? '');
+    const available = contentWidth - selectedFont.widthOfTextAtSize(left, size) - selectedFont.widthOfTextAtSize(right, size) - 8;
+    if (available >= 4) {
+      operations.push({ type: 'pair', left, right, size, font: selectedFont, color: options.color || darkText, gap: options.gap ?? 4 });
+    } else {
+      pushText(left, { size, bold: options.bold, color: options.color, gap: 0 });
+      pushText(right, { size, bold: options.bold, color: options.color, align: 'right', gap: options.gap ?? 4 });
+    }
+  };
+  const pushRule = () => operations.push({ type: 'rule', gap: 7 });
   const currency = invoice.restaurant.currency || 'RWF';
   const fmt = (n) => `${Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 })} ${currency}`;
 
-  invoice.items.forEach((item) => {
-    if (y < 120) return; // guard against overflow on very long orders (single-page invoice)
-    drawText(item.product_name, col.name + 5, y, { size: 9.5 });
-    drawText(String(item.quantity), col.qty, y, { size: 9.5 });
-    drawText(fmt(item.unit_price), col.price, y, { size: 9.5 });
-    drawText(fmt(item.line_total), col.total, y, { size: 9.5 });
-    y -= 18;
-  });
+  // Store name and contact details
+  pushText(invoice.restaurant.restaurant_name || 'Restaurant', { size: 14, bold: true, color: brandColor, align: 'center', gap: 3 });
+  if (invoice.restaurant.address) pushText(invoice.restaurant.address, { size: 8, color: gray, align: 'center', gap: 1 });
+  if (invoice.restaurant.phone) pushText(`Tel: ${invoice.restaurant.phone}`, { size: 8, color: gray, align: 'center', gap: 1 });
+  if (invoice.restaurant.email) pushText(invoice.restaurant.email, { size: 8, color: gray, align: 'center', gap: 1 });
+  pushRule();
 
-  y -= 10;
-  page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 1, color: rgb(0.85, 0.85, 0.85) });
-  y -= 20;
+  pushText('INVOICE / SALES RECEIPT', { size: 11, bold: true, align: 'center', gap: 5 });
+  pushPair('Invoice:', invoice.invoice_number, { size: 8 });
+  pushPair('Order:', invoice.order_number, { size: 8 });
+  pushPair('Date:', new Date(invoice.created_at).toLocaleString(), { size: 8 });
+  pushPair('Payment:', String(invoice.payment_status || 'unpaid').toUpperCase(), { size: 8, gap: 5 });
+  pushRule();
 
-  const totalsX = 400;
-  drawText('Subtotal', totalsX, y, { size: 9.5, color: gray });
-  drawText(fmt(invoice.subtotal), col.total, y, { size: 9.5 }); y -= 16;
-  if (Number(invoice.discount) > 0) {
-    drawText('Discount', totalsX, y, { size: 9.5, color: gray });
-    drawText(`-${fmt(invoice.discount)}`, col.total, y, { size: 9.5 }); y -= 16;
+  pushText('CUSTOMER', { size: 8, bold: true, color: gray, gap: 3 });
+  pushText(invoice.customer_name || 'Walk-in customer', { size: 9, bold: true, gap: 2 });
+  if (invoice.customer_phone) pushText(invoice.customer_phone, { size: 8, color: gray, gap: 2 });
+  if (invoice.customer_address) pushText(invoice.customer_address, { size: 8, color: gray, gap: 3 });
+  pushRule();
+
+  pushText('ITEMS', { size: 8, bold: true, color: gray, gap: 4 });
+  for (const item of invoice.items || []) {
+    pushText(item.product_name, { size: 9, bold: true, gap: 2 });
+    const quantity = Number(item.quantity).toLocaleString('en-US', { maximumFractionDigits: 2 });
+    pushPair(`${quantity} × ${fmt(item.unit_price)}`, fmt(item.line_total), { size: 8, gap: 5 });
   }
-  if (Number(invoice.tax) > 0) {
-    drawText('Tax', totalsX, y, { size: 9.5, color: gray });
-    drawText(fmt(invoice.tax), col.total, y, { size: 9.5 }); y -= 16;
-  }
-  drawText('Grand Total', totalsX, y, { size: 11, bold: true });
-  drawText(fmt(invoice.grand_total), col.total, y, { size: 11, bold: true });
+  pushRule();
 
-  // Footer
-  const footerY = 60;
-  page.drawLine({ start: { x: margin, y: footerY + 20 }, end: { x: width - margin, y: footerY + 20 }, thickness: 0.5, color: rgb(0.9, 0.9, 0.9) });
-  drawText('Thank you for your order!', margin, footerY, { size: 9, color: gray });
-  drawText(`Issued by: ${invoice.issued_by_name || 'System'}`, margin, footerY - 14, { size: 8, color: gray });
+  pushPair('Subtotal', fmt(invoice.subtotal), { size: 8, color: gray, gap: 4 });
+  if (Number(invoice.discount) > 0) pushPair('Discount', `-${fmt(invoice.discount)}`, { size: 8, color: gray, gap: 4 });
+  if (Number(invoice.tax) > 0) pushPair('Tax / VAT', fmt(invoice.tax), { size: 8, color: gray, gap: 4 });
+  pushRule();
+  pushPair('TOTAL TO PAY', fmt(invoice.grand_total), { size: 11, bold: true, gap: 7 });
+  pushRule();
+  pushText('Thank you for your order!', { size: 9, bold: true, align: 'center', gap: 3 });
+  pushText(`Issued by: ${invoice.issued_by_name || 'System'}`, { size: 7, color: gray, align: 'center', gap: 0 });
+
+  const top = 12;
+  const bottom = 12;
+  const height = top + bottom + operations.reduce((sum, operation) => sum + (operation.type === 'rule' ? 10 : operation.size + operation.gap), 0);
+  const page = doc.addPage([width, height]);
+  let y = height - top;
+  for (const operation of operations) {
+    if (operation.type === 'rule') {
+      y -= 3;
+      page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 0.6, color: rulesColor });
+      y -= 7;
+      continue;
+    }
+
+    y -= operation.size;
+    if (operation.type === 'pair') {
+      page.drawText(operation.left, { x: margin, y, size: operation.size, font: operation.font, color: operation.color });
+      const valueWidth = operation.font.widthOfTextAtSize(operation.right, operation.size);
+      page.drawText(operation.right, { x: width - margin - valueWidth, y, size: operation.size, font: operation.font, color: operation.color });
+    } else {
+      const textWidth = operation.font.widthOfTextAtSize(operation.text, operation.size);
+      const x = operation.align === 'center' ? (width - textWidth) / 2
+        : operation.align === 'right' ? width - margin - textWidth : margin;
+      page.drawText(operation.text, { x, y, size: operation.size, font: operation.font, color: operation.color });
+    }
+    y -= operation.gap;
+  }
 
   const pdfBytes = await doc.save();
   return Buffer.from(pdfBytes);

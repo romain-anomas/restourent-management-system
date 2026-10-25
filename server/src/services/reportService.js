@@ -1,6 +1,51 @@
 const { pool } = require('../config/db');
 const ApiError = require('../utils/ApiError');
 
+function summarizeSalesOrders(orders, from, to) {
+  const start = from ? new Date(`${from}T00:00:00`) : null;
+  const end = to ? new Date(`${to}T23:59:59`) : null;
+
+  const inRange = (createdAt) => {
+    if (!createdAt) return false;
+    const date = new Date(createdAt);
+    if (Number.isNaN(date.getTime())) return false;
+    if (start && date < start) return false;
+    if (end && date > end) return false;
+    return true;
+  };
+
+  const completedOrders = orders.filter((order) => {
+    if (!inRange(order.created_at)) return false;
+    if (order.status !== 'completed') return false;
+    if (order.status === 'cancelled') return false;
+    if (order.payment_status === 'refunded') return false;
+    return true;
+  });
+
+  const paidCompletedOrders = completedOrders.filter((order) => order.payment_status === 'paid');
+  const unpaidCompletedOrders = completedOrders.filter((order) => order.payment_status !== 'paid');
+
+  const totalSales = paidCompletedOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+
+  return {
+    totalSales,
+    numberOfOrders: paidCompletedOrders.length,
+    paidOrders: paidCompletedOrders.length,
+    pendingOrders: unpaidCompletedOrders.length,
+    cancelledOrders: 0,
+  };
+}
+
+function calculateTableSessionTotal(orders) {
+  return orders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+}
+
+function resolveTableStatus(status) {
+  const normalized = (status || '').toString().toUpperCase();
+  if (!normalized) return 'AVAILABLE';
+  return normalized;
+}
+
 /**
  * Builds the full report payload for a given inclusive date range
  * (YYYY-MM-DD strings). Used by all four report endpoints - they only
@@ -11,15 +56,17 @@ async function generateReport(from, to) {
     pool.query(
       `SELECT
          COUNT(*) AS total,
-         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+         SUM(CASE WHEN status = 'completed' AND payment_status = 'paid' THEN 1 ELSE 0 END) AS paid_orders,
+         SUM(CASE WHEN status = 'completed' AND payment_status != 'paid' THEN 1 ELSE 0 END) AS unpaid_completed_orders,
          SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
-         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending
+         SUM(CASE WHEN status != 'cancelled' AND payment_status != 'paid' THEN 1 ELSE 0 END) AS pending,
+         SUM(CASE WHEN status = 'completed' AND payment_status = 'paid' THEN total_amount ELSE 0 END) AS total_sales
        FROM orders WHERE DATE(created_at) BETWEEN ? AND ?`,
       [from, to]
     ),
     pool.query(
       `SELECT COALESCE(SUM(total_amount),0) AS revenue FROM orders
-       WHERE status = 'completed' AND DATE(created_at) BETWEEN ? AND ?`,
+       WHERE status = 'completed' AND payment_status = 'paid' AND DATE(created_at) BETWEEN ? AND ?`,
       [from, to]
     ),
     pool.query(
@@ -87,17 +134,27 @@ async function generateReport(from, to) {
   const revenue = Number(revenueRow.revenue);
   const cogs = Number(cogsRow.cogs);
   const expenses = Number(expensesRow.total);
+  const totalSales = Number(orderStats.total_sales || 0);
+  const paidOrders = Number(orderStats.paid_orders || 0);
+  const pendingOrders = Number(orderStats.pending || 0);
+  const cancelledOrders = Number(orderStats.cancelled || 0);
   const estimatedProfit = revenue - cogs - expenses;
 
   return {
     period: { from, to },
     orders: {
-      total: orderStats.total,
-      completed: orderStats.completed || 0,
-      cancelled: orderStats.cancelled || 0,
-      pending: orderStats.pending || 0,
+      total: Number(orderStats.total || 0),
+      completed: paidOrders,
+      cancelled: cancelledOrders,
+      pending: pendingOrders,
+      paid: paidOrders,
+      totalSales,
+      numberOfOrders: Number(orderStats.total || 0),
+      paidOrders,
+      pendingOrders,
+      cancelledOrders,
     },
-    finance: { revenue, costOfGoods: cogs, expenses, estimatedProfit },
+    finance: { revenue, totalSales, costOfGoods: cogs, expenses, estimatedProfit },
     productsSold,
     stockMovements: {
       stockIn: Number(stockIn.total),
@@ -137,7 +194,10 @@ function getMonthRange(year, month) {
 }
 
 function toDateStr(d) {
-  return d.toISOString().slice(0, 10);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 /**
@@ -174,4 +234,13 @@ function reportToCsv(report) {
   return lines.join('\n');
 }
 
-module.exports = { generateReport, getWeekRange, getMonthRange, toDateStr, reportToCsv };
+module.exports = {
+  generateReport,
+  getWeekRange,
+  getMonthRange,
+  toDateStr,
+  reportToCsv,
+  summarizeSalesOrders,
+  calculateTableSessionTotal,
+  resolveTableStatus,
+};

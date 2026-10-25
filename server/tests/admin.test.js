@@ -117,6 +117,7 @@ describe('Order confirmation deducts inventory, cancellation restocks it', () =>
         customerName: 'Stock Test Customer',
         customerPhone: '0780000001',
         items: [{ productId, quantity: 3 }],
+        paymentMethod: 'momo',
       });
     orderId = orderRes.body.data.id;
   });

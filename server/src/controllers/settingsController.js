@@ -11,7 +11,8 @@ const { logActivity } = require('../services/activityLogService');
 const getPublicSettings = asyncHandler(async (req, res) => {
   const [rows] = await pool.query(
     `SELECT restaurant_name, logo_path, phone, email, address, description,
-            opening_hours, currency, tax_percent
+            opening_hours, currency, tax_percent,
+            momo_code, momo_number, momo_name, airtel_money_number
      FROM restaurant_settings LIMIT 1`
   );
 
@@ -25,9 +26,13 @@ const getPublicSettings = asyncHandler(async (req, res) => {
     opening_hours: null,
     currency: 'RWF',
     tax_percent: 0,
+    momo_code: null,
+    momo_number: null,
+    momo_name: null,
+    airtel_money_number: null,
   };
 
-  res.json({ success: true, data: settings });
+  res.json({ success: true, data: { ...settings, card_payments_enabled: Boolean(process.env.FLW_SECRET_KEY) } });
 });
 
 /** GET /api/settings - admin only. Full settings row for the Settings page. */
@@ -46,6 +51,7 @@ const updateSettings = asyncHandler(async (req, res) => {
   const {
     restaurantName, phone, email, address, description, openingHours,
     currency, taxPercent, invoicePrefix, orderPrefix, allowNegativeStockDefault,
+    momoCode, momoNumber, momoName, airtelMoneyNumber,
   } = req.body;
 
   const [existingRows] = await pool.query('SELECT * FROM restaurant_settings LIMIT 1');
@@ -68,30 +74,38 @@ const updateSettings = asyncHandler(async (req, res) => {
       allowNegativeStockDefault !== undefined
         ? (allowNegativeStockDefault === 'true' || allowNegativeStockDefault === true ? 1 : 0)
         : existing?.allow_negative_stock_default ?? 0,
+    momo_code: momoCode !== undefined ? momoCode?.trim() || null : existing?.momo_code,
+    momo_number: momoNumber !== undefined ? momoNumber?.trim() || null : existing?.momo_number,
+    momo_name: momoName !== undefined ? momoName?.trim() || null : existing?.momo_name,
+    airtel_money_number: airtelMoneyNumber !== undefined ? airtelMoneyNumber?.trim() || null : existing?.airtel_money_number,
   };
 
   if (existing) {
     await pool.query(
       `UPDATE restaurant_settings SET
         restaurant_name=?, logo_path=?, phone=?, email=?, address=?, description=?, opening_hours=?,
-        currency=?, tax_percent=?, invoice_prefix=?, order_prefix=?, allow_negative_stock_default=?
+        currency=?, tax_percent=?, invoice_prefix=?, order_prefix=?, allow_negative_stock_default=?,
+        momo_code=?, momo_number=?, momo_name=?, airtel_money_number=?
        WHERE id=?`,
       [
         values.restaurant_name, logoPath, values.phone, values.email, values.address, values.description,
         values.opening_hours, values.currency, values.tax_percent, values.invoice_prefix, values.order_prefix,
-        values.allow_negative_stock_default, existing.id,
+        values.allow_negative_stock_default, values.momo_code, values.momo_number, values.momo_name,
+        values.airtel_money_number, existing.id,
       ]
     );
   } else {
     await pool.query(
       `INSERT INTO restaurant_settings
         (restaurant_name, logo_path, phone, email, address, description, opening_hours,
-         currency, tax_percent, invoice_prefix, order_prefix, allow_negative_stock_default)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         currency, tax_percent, invoice_prefix, order_prefix, allow_negative_stock_default,
+         momo_code, momo_number, momo_name, airtel_money_number)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         values.restaurant_name, logoPath, values.phone, values.email, values.address, values.description,
         values.opening_hours, values.currency, values.tax_percent, values.invoice_prefix, values.order_prefix,
-        values.allow_negative_stock_default,
+        values.allow_negative_stock_default, values.momo_code, values.momo_number, values.momo_name,
+        values.airtel_money_number,
       ]
     );
   }

@@ -18,6 +18,14 @@ require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const mysql = require('mysql2/promise');
 
+const normalizeDbPassword = () => {
+  const password = process.env.DB_PASSWORD;
+  if (!password || password === 'your_mysql_password') {
+    return '';
+  }
+  return password;
+};
+
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL || 'admin@restaurant.com';
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || 'Admin@12345';
 const WORKER_PASSWORD = 'Worker@12345';
@@ -27,7 +35,7 @@ async function main() {
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 3306,
     user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
+    password: normalizeDbPassword(),
     database: process.env.DB_NAME || 'restaurant_management',
     multipleStatements: false,
   });
@@ -45,7 +53,13 @@ async function main() {
     );
     console.log(`   ✔ Admin created: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
   } else {
-    console.log(`   • Admin already exists (${ADMIN_EMAIL}), skipping.`);
+    await conn.query(
+      `UPDATE users
+       SET full_name = ?, phone = ?, password_hash = ?, role = 'admin', status = 'active', must_change_password = 1
+       WHERE email = ?`,
+      ['Restaurant Owner', '0780000000', adminHash, ADMIN_EMAIL]
+    );
+    console.log(`   • Admin already exists (${ADMIN_EMAIL}), refreshed default credentials.`);
   }
 
   // ---------- Workers ----------
@@ -65,7 +79,13 @@ async function main() {
       );
       console.log(`   ✔ Worker created: ${w.email} / ${WORKER_PASSWORD}`);
     } else {
-      console.log(`   • Worker already exists (${w.email}), skipping.`);
+      await conn.query(
+        `UPDATE users
+         SET full_name = ?, phone = ?, password_hash = ?, role = 'worker', status = 'active', must_change_password = 1
+         WHERE email = ?`,
+        [w.name, w.phone, workerHash, w.email]
+      );
+      console.log(`   • Worker already exists (${w.email}), refreshed default credentials.`);
     }
   }
 
@@ -120,8 +140,9 @@ async function main() {
   if (settingsRows.length === 0) {
     await conn.query(
       `INSERT INTO restaurant_settings
-        (restaurant_name, phone, email, address, description, opening_hours, currency, tax_percent, invoice_prefix, order_prefix)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (restaurant_name, phone, email, address, description, opening_hours, currency, tax_percent, invoice_prefix, order_prefix,
+         momo_code, momo_number, momo_name, airtel_money_number)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         'Tasty Bites Restaurant',
         '0780000000',
@@ -133,9 +154,38 @@ async function main() {
         0,
         'INV',
         'ORD',
+        '937559',
+        '0793450646',
+        'ISHIMWE Romain',
+        '0722312312',
       ]
     );
-    console.log('   ✔ Restaurant settings created');
+    console.log('   ✔ Restaurant settings created (with MoMo + Airtel Money payment details)');
+  } else {
+    await conn.query(
+      `UPDATE restaurant_settings
+       SET restaurant_name = ?, phone = ?, email = ?, address = ?, description = ?,
+           opening_hours = ?, currency = ?, tax_percent = 0, invoice_prefix = ?, order_prefix = ?,
+           momo_code = ?, momo_number = ?, momo_name = ?, airtel_money_number = ?
+       WHERE id = ?`,
+      [
+        'Tasty Bites Restaurant',
+        '0780000000',
+        ADMIN_EMAIL,
+        'KG 123 St, Kigali, Rwanda',
+        'A cozy restaurant serving fresh local and international dishes.',
+        'Mon-Sun: 7:00 AM - 10:00 PM',
+        'RWF',
+        'INV',
+        'ORD',
+        '937559',
+        '0793450646',
+        'ISHIMWE Romain',
+        '0722312312',
+        settingsRows[0].id,
+      ]
+    );
+    console.log('   • Restaurant settings already existed, reset defaults (tax 0, payment details).');
   }
 
   console.log('\n✅ Seeding complete.');

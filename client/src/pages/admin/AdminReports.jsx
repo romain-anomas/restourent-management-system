@@ -160,15 +160,15 @@ export default function AdminReports() {
           </h2>
 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <ReportStat label="Total Sales" value={formatMoney(report.finance.totalSales || report.orders.totalSales || 0)} />
             <ReportStat label="Total Orders" value={report.orders.total} />
-            <ReportStat label="Completed" value={report.orders.completed} />
-            <ReportStat label="Cancelled" value={report.orders.cancelled} />
-            <ReportStat label="Pending" value={report.orders.pending} />
+            <ReportStat label="Paid Orders" value={report.orders.paidOrders || report.orders.completed || 0} />
+            <ReportStat label="Cancelled Orders" value={report.orders.cancelledOrders || report.orders.cancelled || 0} />
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <ReportStat label="Pending Orders" value={report.orders.pendingOrders || report.orders.pending || 0} />
             <ReportStat label="Revenue" value={formatMoney(report.finance.revenue)} />
-            <ReportStat label="Cost of Goods" value={formatMoney(report.finance.costOfGoods)} />
             <ReportStat label="Expenses" value={formatMoney(report.finance.expenses)} />
             <ReportStat
               label="Estimated Profit"

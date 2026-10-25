@@ -22,6 +22,8 @@ const reportRoutes = require('./routes/reportRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const activityRoutes = require('./routes/activityRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+const tableRoutes = require('./routes/tableRoutes');
 
 const app = express();
 
@@ -33,7 +35,7 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '2mb', verify: (req, res, buffer) => { req.rawBody = buffer.toString(); } }));
 app.use(express.urlencoded({ extended: true }));
 
 if (process.env.NODE_ENV !== 'test') {
@@ -74,6 +76,8 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/activity', activityRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/tables', tableRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

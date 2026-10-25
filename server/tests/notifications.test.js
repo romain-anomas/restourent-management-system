@@ -32,6 +32,7 @@ describe('Notifications', () => {
           customerName: 'Notification Test Customer',
           customerPhone: '0780000003',
           items: [{ productId: productsRes.body.data[0].id, quantity: 1 }],
+          paymentMethod: 'momo',
         });
     }
   });

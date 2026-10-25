@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState, useCallback, useMemo } 
 
 const CartContext = createContext(null);
 const STORAGE_KEY = 'tastybites_cart';
+const TABLE_STORAGE_KEY = 'tastybites_selected_table';
+const TABLE_SESSION_STORAGE_KEY = 'tastybites_active_table_session';
 
 function loadInitialCart() {
   try {
@@ -14,10 +16,39 @@ function loadInitialCart() {
 
 export function CartProvider({ children }) {
   const [items, setItems] = useState(loadInitialCart);
+  const [selectedTable, setSelectedTableState] = useState(() => {
+    try {
+      const raw = localStorage.getItem(TABLE_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [activeTableSession, setActiveTableSessionState] = useState(() => {
+    try {
+      const raw = localStorage.getItem(TABLE_SESSION_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, [items]);
+
+  useEffect(() => {
+    if (selectedTable) localStorage.setItem(TABLE_STORAGE_KEY, JSON.stringify(selectedTable));
+    else localStorage.removeItem(TABLE_STORAGE_KEY);
+  }, [selectedTable]);
+
+  useEffect(() => {
+    if (activeTableSession) localStorage.setItem(TABLE_SESSION_STORAGE_KEY, JSON.stringify(activeTableSession));
+    else localStorage.removeItem(TABLE_SESSION_STORAGE_KEY);
+  }, [activeTableSession]);
+
+  const setSelectedTable = useCallback((table) => setSelectedTableState(table), []);
+  const setActiveTableSession = useCallback((session) => setActiveTableSessionState(session), []);
 
   const addItem = useCallback((product, quantity = 1) => {
     setItems((prev) => {
@@ -61,7 +92,7 @@ export function CartProvider({ children }) {
     [items]
   );
 
-  const value = { items, addItem, removeItem, updateQuantity, clearCart, itemCount, subtotal };
+  const value = { items, addItem, removeItem, updateQuantity, clearCart, itemCount, subtotal, selectedTable, setSelectedTable, activeTableSession, setActiveTableSession };
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

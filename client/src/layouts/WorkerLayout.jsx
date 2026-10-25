@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import { FiGrid, FiShoppingBag, FiPackage, FiClipboard, FiActivity, FiUser, FiSettings } from 'react-icons/fi';
+import { FiGrid, FiShoppingBag, FiPackage, FiClipboard, FiActivity, FiUser, FiSettings, FiMapPin } from 'react-icons/fi';
 import Sidebar from '../components/Sidebar';
 import Topbar from '../components/Topbar';
 
 const NAV_ITEMS = [
   { to: '/worker', label: 'Dashboard', icon: FiGrid, end: true },
   { to: '/worker/orders', label: 'Orders', icon: FiShoppingBag },
+  { to: '/worker/tables', label: 'Seating Plan', icon: FiMapPin },
   { to: '/worker/inventory', label: 'Inventory/Stock', icon: FiPackage },
   { to: '/worker/stock-taking', label: 'Stock Taking', icon: FiClipboard },
   { to: '/worker/activity', label: 'Activity', icon: FiActivity },

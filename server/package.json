@@ -8,6 +8,7 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "seed": "node database/seed.js",
+    "momo:setup": "node scripts/momoSetup.js",
     "test": "jest --runInBand"
   },
   "dependencies": {

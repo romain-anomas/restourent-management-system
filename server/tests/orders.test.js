@@ -54,6 +54,7 @@ describe('Public storefront API', () => {
         customerName: 'Test Customer',
         customerPhone: '0780000000',
         items: [{ productId: product.id, quantity: 2 }],
+        paymentMethod: 'momo',
       });
 
     expect(orderRes.statusCode).toBe(201);

@@ -6,6 +6,7 @@ import { useCart } from '../context/CartContext';
 const NAV_LINKS = [
   { to: '/', label: 'Home', end: true },
   { to: '/menu', label: 'Menu' },
+  { to: '/seating', label: 'Dine In' },
   { to: '/about', label: 'About' },
   { to: '/contact', label: 'Contact' },
 ];

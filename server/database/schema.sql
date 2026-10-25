@@ -71,26 +71,90 @@ CREATE TABLE IF NOT EXISTS products (
 -- ------------------------------------------------------------
 -- 4. ORDERS
 -- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS restaurant_tables (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  table_number VARCHAR(40) NOT NULL,
+  table_name VARCHAR(100) DEFAULT NULL,
+  capacity INT UNSIGNED NOT NULL DEFAULT 2,
+  status ENUM('AVAILABLE','OCCUPIED','ORDERING','PAYMENT_PENDING','RESERVED') NOT NULL DEFAULT 'AVAILABLE',
+  section VARCHAR(100) DEFAULT NULL,
+  position_x INT DEFAULT NULL,
+  position_y INT DEFAULT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_tables_number (table_number),
+  KEY idx_tables_status (status),
+  KEY idx_tables_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS table_sessions (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  table_id INT UNSIGNED NOT NULL,
+  session_number VARCHAR(40) NOT NULL,
+  status ENUM('ACTIVE','PAYMENT_PENDING','CLOSED') NOT NULL DEFAULT 'ACTIVE',
+  opened_by INT UNSIGNED DEFAULT NULL,
+  closed_by INT UNSIGNED DEFAULT NULL,
+  total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  guest_access_token_hash CHAR(64) DEFAULT NULL,
+  opened_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  closed_at DATETIME DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_sessions_number (session_number),
+  KEY idx_sessions_table (table_id),
+  KEY idx_sessions_status (status),
+  CONSTRAINT fk_table_sessions_table FOREIGN KEY (table_id) REFERENCES restaurant_tables(id) ON DELETE CASCADE,
+  CONSTRAINT fk_table_sessions_opened_by FOREIGN KEY (opened_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_table_sessions_closed_by FOREIGN KEY (closed_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS orders (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   order_number VARCHAR(30) NOT NULL,
   customer_name VARCHAR(150) NOT NULL,
   customer_phone VARCHAR(30) NOT NULL,
+  customer_email VARCHAR(255) DEFAULT NULL,
   customer_address VARCHAR(255) DEFAULT NULL,
   notes TEXT,
+  order_type ENUM('DINE_IN','TAKEAWAY','ONLINE') NOT NULL DEFAULT 'ONLINE',
+  table_id INT UNSIGNED DEFAULT NULL,
+  table_session_id INT UNSIGNED DEFAULT NULL,
   subtotal DECIMAL(12,2) NOT NULL DEFAULT 0.00,
   discount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
   tax DECIMAL(12,2) NOT NULL DEFAULT 0.00,
   total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
   status ENUM('pending','confirmed','preparing','ready','completed','cancelled') NOT NULL DEFAULT 'pending',
   payment_status ENUM('unpaid','paid','refunded') NOT NULL DEFAULT 'unpaid',
+  payment_method ENUM('momo','airtel_money','cash','card') DEFAULT NULL,
+  payment_reference VARCHAR(100) DEFAULT NULL,
+  momo_reference_id VARCHAR(64) DEFAULT NULL,
   handled_by INT UNSIGNED DEFAULT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_orders_number (order_number),
   KEY idx_orders_status (status),
   KEY idx_orders_created (created_at),
-  CONSTRAINT fk_orders_handled_by FOREIGN KEY (handled_by) REFERENCES users(id) ON DELETE SET NULL
+  KEY idx_orders_order_type (order_type),
+  KEY idx_orders_table_session (table_session_id),
+  KEY idx_orders_table (table_id),
+  CONSTRAINT fk_orders_handled_by FOREIGN KEY (handled_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_orders_table FOREIGN KEY (table_id) REFERENCES restaurant_tables(id) ON DELETE SET NULL,
+  CONSTRAINT fk_orders_table_session FOREIGN KEY (table_session_id) REFERENCES table_sessions(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS payment_transactions (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  order_id INT UNSIGNED NOT NULL,
+  provider VARCHAR(30) NOT NULL,
+  tx_ref VARCHAR(100) NOT NULL,
+  gateway_transaction_id VARCHAR(100) DEFAULT NULL,
+  status ENUM('pending','successful','failed') NOT NULL DEFAULT 'pending',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_payment_transactions_tx_ref (tx_ref),
+  KEY idx_payment_transactions_order (order_id),
+  CONSTRAINT fk_payment_transactions_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ------------------------------------------------------------
@@ -224,6 +288,43 @@ CREATE TABLE IF NOT EXISTS expenses (
 -- ------------------------------------------------------------
 -- 11. INVOICES
 -- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS restaurant_tables (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  table_number VARCHAR(30) NOT NULL,
+  table_name VARCHAR(100) DEFAULT NULL,
+  capacity INT NOT NULL DEFAULT 2,
+  status ENUM('AVAILABLE','OCCUPIED','ORDERING','PAYMENT_PENDING','RESERVED') NOT NULL DEFAULT 'AVAILABLE',
+  section VARCHAR(80) DEFAULT NULL,
+  position_x INT DEFAULT NULL,
+  position_y INT DEFAULT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_restaurant_tables_number (table_number),
+  KEY idx_restaurant_tables_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS table_sessions (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  table_id INT UNSIGNED NOT NULL,
+  session_number VARCHAR(40) NOT NULL,
+  status ENUM('ACTIVE','PAYMENT_PENDING','CLOSED') NOT NULL DEFAULT 'ACTIVE',
+  opened_by INT UNSIGNED DEFAULT NULL,
+  closed_by INT UNSIGNED DEFAULT NULL,
+  opened_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  closed_at DATETIME DEFAULT NULL,
+  total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  guest_access_token_hash CHAR(64) DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_table_sessions_number (session_number),
+  KEY idx_table_sessions_table_id (table_id),
+  KEY idx_table_sessions_status (status),
+  CONSTRAINT fk_table_sessions_table FOREIGN KEY (table_id) REFERENCES restaurant_tables(id) ON DELETE CASCADE,
+  CONSTRAINT fk_table_sessions_opened_by FOREIGN KEY (opened_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_table_sessions_closed_by FOREIGN KEY (closed_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS invoices (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   invoice_number VARCHAR(30) NOT NULL,
@@ -298,6 +399,10 @@ CREATE TABLE IF NOT EXISTS restaurant_settings (
   invoice_prefix VARCHAR(10) NOT NULL DEFAULT 'INV',
   order_prefix VARCHAR(10) NOT NULL DEFAULT 'ORD',
   allow_negative_stock_default TINYINT(1) NOT NULL DEFAULT 0,
+  momo_code VARCHAR(30) DEFAULT NULL,
+  momo_number VARCHAR(30) DEFAULT NULL,
+  momo_name VARCHAR(100) DEFAULT NULL,
+  airtel_money_number VARCHAR(30) DEFAULT NULL,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

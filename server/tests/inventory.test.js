@@ -1,6 +1,7 @@
 /**
- * Tests for Phase 6 inventory endpoints. Requires the database to be
- * schema-imported and seeded first.
+ * Tests for inventory endpoint access control and transaction history.
+ * Requires the database to be schema-imported and seeded first.
+ * See bulkInventory.test.js for multi-product batch scenarios.
  */
 const request = require('supertest');
 const app = require('../src/app');
@@ -34,12 +35,12 @@ describe('Inventory endpoints are admin-only', () => {
   });
 
   test('unauthenticated request is rejected', async () => {
-    const res = await request(app).post('/api/inventory/stock-in').send({ productId: 1, quantity: 5 });
+    const res = await request(app).post('/api/inventory/stock-in').send({ items: [{ productId: 1, quantity: 5 }] });
     expect(res.statusCode).toBe(401);
   });
 });
 
-describe('Stock in/out/adjustment', () => {
+describe('Single-item stock in/out/adjustment (as a one-item batch)', () => {
   let adminToken;
   let productId;
 
@@ -52,25 +53,25 @@ describe('Stock in/out/adjustment', () => {
     const res = await request(app)
       .post('/api/inventory/stock-in')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ productId, quantity: 5, unitCost: 500, supplier: 'Test Supplier' });
+      .send({ items: [{ productId, quantity: 5, unitCost: 500 }], supplier: 'Test Supplier' });
     expect(res.statusCode).toBe(201);
-    expect(res.body.data.newStock).toBe(15);
+    expect(res.body.data[0].newStock).toBe(15);
   });
 
   test('stock-out decreases stock', async () => {
     const res = await request(app)
       .post('/api/inventory/stock-out')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ productId, quantity: 3, reason: 'Kitchen use' });
+      .send({ items: [{ productId, quantity: 3 }], reason: 'Kitchen use' });
     expect(res.statusCode).toBe(201);
-    expect(res.body.data.newStock).toBe(12);
+    expect(res.body.data[0].newStock).toBe(12);
   });
 
   test('stock-out is rejected if it would go negative and allow_negative_stock is off', async () => {
     const res = await request(app)
       .post('/api/inventory/stock-out')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ productId, quantity: 999, reason: 'Too much' });
+      .send({ items: [{ productId, quantity: 999 }], reason: 'Too much' });
     expect(res.statusCode).toBe(409);
   });
 
@@ -78,7 +79,7 @@ describe('Stock in/out/adjustment', () => {
     const res = await request(app)
       .post('/api/inventory/adjustment')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ productId, newQuantity: 20 });
+      .send({ items: [{ productId, newQuantity: 20 }] });
     expect(res.statusCode).toBe(400);
   });
 
@@ -86,7 +87,7 @@ describe('Stock in/out/adjustment', () => {
     const res = await request(app)
       .post('/api/inventory/adjustment')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ productId, newQuantity: 20, reason: 'Physical count correction' });
+      .send({ items: [{ productId, newQuantity: 20 }], reason: 'Physical count correction' });
     expect(res.statusCode).toBe(201);
 
     const productRes = await request(app).get(`/api/products/${productId}`);

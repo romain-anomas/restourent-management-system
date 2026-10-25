@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import {
   FiGrid, FiShoppingBag, FiTag, FiBox, FiUsers, FiPackage, FiDollarSign,
-  FiTrendingUp, FiFileText, FiPieChart, FiBell, FiSettings, FiUser,
+  FiTrendingUp, FiFileText, FiPieChart, FiBell, FiSettings, FiUser, FiTable,
 } from 'react-icons/fi';
 import Sidebar from '../components/Sidebar';
 import Topbar from '../components/Topbar';
@@ -10,6 +10,7 @@ import Topbar from '../components/Topbar';
 const NAV_ITEMS = [
   { to: '/admin', label: 'Dashboard', icon: FiGrid, end: true },
   { to: '/admin/orders', label: 'Orders', icon: FiShoppingBag },
+  { to: '/admin/tables', label: 'Tables', icon: FiTable },
   { to: '/admin/products', label: 'Products', icon: FiBox },
   { to: '/admin/categories', label: 'Categories', icon: FiTag },
   { to: '/admin/inventory', label: 'Inventory', icon: FiPackage },

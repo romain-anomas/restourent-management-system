@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { FiEye, FiFileText } from 'react-icons/fi';
+import { FiEye, FiFileText, FiPlus } from 'react-icons/fi';
 import { orderService } from '../../services/orderService';
 import { invoiceService } from '../../services/invoiceService';
 import { formatMoney } from '../../utils/format';
@@ -8,6 +8,15 @@ import SearchInput from '../../components/SearchInput';
 import Modal from '../../components/Modal';
 import Badge from '../../components/Badge';
 import LoadingScreen from '../../components/LoadingScreen';
+import PaymentMethodBadge, { PAYMENT_METHOD_LABELS } from '../../components/PaymentMethodBadge';
+import { formatTableLabel } from '../../utils/format';
+
+const orderTypeStyle = {
+  DINE_IN: 'bg-emerald-100 text-emerald-800',
+  ONLINE: 'bg-sky-100 text-sky-800',
+  TAKEAWAY: 'bg-violet-100 text-violet-800',
+};
+import NewOrderModal from './NewOrderModal';
 
 const STATUS_OPTIONS = ['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'];
 const NEXT_STATUS = {
@@ -33,6 +42,8 @@ export default function OrdersManagement({ title = 'Orders', subtitle = 'View an
   const [detailLoading, setDetailLoading] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [paymentUpdating, setPaymentUpdating] = useState(false);
+  const [newOrderModalOpen, setNewOrderModalOpen] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -97,11 +108,34 @@ export default function OrdersManagement({ title = 'Orders', subtitle = 'View an
     }
   };
 
+  const handleMarkPaid = async () => {
+    if (!selectedOrder) return;
+    setPaymentUpdating(true);
+    try {
+      const result = await orderService.updatePaymentStatus(selectedOrder.id, 'paid');
+      setSelectedOrder((prev) => ({ ...prev, payment_status: 'paid' }));
+      toast.success(result.tableSessionClosed ? 'Paid in full. The table is available again.' : 'Marked as paid');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update payment status.');
+    } finally {
+      setPaymentUpdating(false);
+    }
+  };
+
   return (
     <div>
-      <div className="mb-5">
-        <h1 className="text-xl font-bold text-ink-900">{title}</h1>
-        <p className="text-sm text-gray-500">{subtitle}</p>
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-ink-900">{title}</h1>
+          <p className="text-sm text-gray-500">{subtitle}</p>
+        </div>
+        <button
+          onClick={() => setNewOrderModalOpen(true)}
+          className="flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
+        >
+          <FiPlus /> New Order
+        </button>
       </div>
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
@@ -126,11 +160,12 @@ export default function OrdersManagement({ title = 'Orders', subtitle = 'View an
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm">
-          <table className="w-full min-w-[720px] text-sm">
+          <table className="w-full min-w-[880px] text-sm">
             <thead className="border-b border-gray-100 bg-gray-50 text-left text-xs font-semibold uppercase text-gray-500">
               <tr>
                 <th className="px-4 py-3">Order #</th>
                 <th className="px-4 py-3">Customer</th>
+                <th className="px-4 py-3">Order type</th>
                 <th className="px-4 py-3">Total</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Date</th>
@@ -145,8 +180,32 @@ export default function OrdersManagement({ title = 'Orders', subtitle = 'View an
                     {o.customer_name}
                     <div className="text-xs text-gray-400">{o.customer_phone}</div>
                   </td>
-                  <td className="px-4 py-3 font-medium text-ink-900">{formatMoney(o.total_amount)}</td>
-                  <td className="px-4 py-3"><Badge status={o.status} /></td>
+                  <td className="px-4 py-3 text-gray-600">
+                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${orderTypeStyle[o.order_type] || orderTypeStyle.ONLINE}`}>
+                      {o.order_type === 'DINE_IN' ? `Dine-in · ${formatTableLabel(o)}` : o.order_type === 'TAKEAWAY' ? 'Takeaway' : 'Delivery'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 font-medium text-ink-900">
+                    {o.order_type === 'DINE_IN' && Number(o.table_session_id) && Number(o.id) === Number(o.latest_order_id) ? (
+                      <>
+                        <span>{formatMoney(o.table_session_total)}</span>
+                        <div className="text-[11px] font-medium text-emerald-700">Current table bill · {o.table_order_count} orders</div>
+                        {Number(o.table_unpaid_order_count) > 0 && <div className="text-[11px] font-semibold text-amber-700">{o.table_unpaid_order_count} order(s) still need payment</div>}
+                        <div className="text-[11px] font-normal text-gray-400">This order: {formatMoney(o.total_amount)}</div>
+                      </>
+                    ) : (
+                      <>
+                        <span>{formatMoney(o.total_amount)}</span>
+                        {o.order_type === 'DINE_IN' && Number(o.table_session_id) > 0 && <div className="text-[11px] font-normal text-gray-400">Order amount</div>}
+                      </>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge status={o.status} />
+                    <div className={`mt-1 text-[11px] font-semibold ${o.payment_status === 'paid' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {o.payment_status === 'paid' ? 'Paid' : 'Payment due'}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-gray-500">{new Date(o.created_at).toLocaleString()}</td>
                   <td className="px-4 py-3 text-right">
                     <button
@@ -182,6 +241,42 @@ export default function OrdersManagement({ title = 'Orders', subtitle = 'View an
 
             {selectedOrder.notes && (
               <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">Note: {selectedOrder.notes}</p>
+            )}
+            {selectedOrder.order_type === 'DINE_IN' && (
+              <p className="rounded-lg bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-800">
+                Dine-in · {formatTableLabel(selectedOrder)}
+              </p>
+            )}
+            {selectedOrder.order_type !== 'DINE_IN' && (
+              <p className={`w-fit rounded-full px-3 py-1.5 text-xs font-semibold ${orderTypeStyle[selectedOrder.order_type] || orderTypeStyle.ONLINE}`}>
+                {selectedOrder.order_type === 'TAKEAWAY' ? 'Takeaway order' : 'Delivery order'}
+              </p>
+            )}
+
+            {selectedOrder.payment_method && (
+              <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5">
+                <div className="flex items-center gap-2.5">
+                  <PaymentMethodBadge method={selectedOrder.payment_method} size={28} />
+                  <div className="text-xs text-gray-600">
+                    <p className="font-medium text-ink-900">
+                      {PAYMENT_METHOD_LABELS[selectedOrder.payment_method] || selectedOrder.payment_method}
+                    </p>
+                    {selectedOrder.payment_reference && <p>Ref: {selectedOrder.payment_reference}</p>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge status={selectedOrder.payment_status}>{selectedOrder.payment_status}</Badge>
+                  {selectedOrder.payment_status !== 'paid' && (
+                    <button
+                      onClick={() => handleMarkPaid()}
+                      disabled={paymentUpdating}
+                      className="rounded-lg border border-green-200 px-2.5 py-1 text-xs font-semibold text-green-700 hover:bg-green-50 disabled:opacity-60"
+                    >
+                      Mark Paid
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
 
             <div>
@@ -249,6 +344,12 @@ export default function OrdersManagement({ title = 'Orders', subtitle = 'View an
           </div>
         )}
       </Modal>
+
+      <NewOrderModal
+        open={newOrderModalOpen}
+        onClose={() => setNewOrderModalOpen(false)}
+        onCreated={load}
+      />
     </div>
   );
 }

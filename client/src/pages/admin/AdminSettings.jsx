@@ -29,6 +29,10 @@ export default function AdminSettings() {
           invoicePrefix: data?.invoice_prefix || 'INV',
           orderPrefix: data?.order_prefix || 'ORD',
           allowNegativeStockDefault: !!data?.allow_negative_stock_default,
+          momoCode: data?.momo_code || '',
+          momoNumber: data?.momo_number || '',
+          momoName: data?.momo_name || '',
+          airtelMoneyNumber: data?.airtel_money_number || '',
         });
         setLogoPreview(imageUrl(data?.logo_path));
       })
@@ -136,6 +140,30 @@ export default function AdminSettings() {
             />
             Allow negative stock by default for new products
           </label>
+        </div>
+
+        {/* Payment methods */}
+        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+          <h2 className="mb-1 text-sm font-semibold text-ink-900">Payment Methods</h2>
+          <p className="mb-4 text-xs text-gray-500">
+            Customers can choose MTN MoMo or Airtel Money. Dine-in customers can pay in person with cards accepted by your terminal. Delivery and takeaway customers can pay online with Visa, Mastercard, American Express, and other cards through Flutterwave after FLW_SECRET_KEY is configured on the server.
+          </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Field label="MoMo Code">
+              <input type="text" value={form.momoCode} onChange={(e) => setForm((f) => ({ ...f, momoCode: e.target.value }))} className="input" />
+            </Field>
+            <Field label="MoMo Number">
+              <input type="text" value={form.momoNumber} onChange={(e) => setForm((f) => ({ ...f, momoNumber: e.target.value }))} className="input" />
+            </Field>
+            <Field label="Registered Name">
+              <input type="text" value={form.momoName} onChange={(e) => setForm((f) => ({ ...f, momoName: e.target.value }))} className="input" />
+            </Field>
+          </div>
+          <div className="mt-4">
+            <Field label="Airtel Money Number">
+              <input type="text" value={form.airtelMoneyNumber} onChange={(e) => setForm((f) => ({ ...f, airtelMoneyNumber: e.target.value }))} className="input" />
+            </Field>
+          </div>
         </div>
 
         <button

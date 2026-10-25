@@ -1,12 +1,17 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams, useOutletContext } from 'react-router-dom';
-import { FiSearch } from 'react-icons/fi';
+import { FiSearch, FiClock } from 'react-icons/fi';
+import toast from 'react-hot-toast';
+import { useCart } from '../../context/CartContext';
+import { tableService } from '../../services/tableService';
+import { formatMoney, formatTableLabel } from '../../utils/format';
 import { categoryService } from '../../services/categoryService';
 import { productService } from '../../services/productService';
 import ProductCard from '../../components/ProductCard';
 
 export default function Menu() {
   const { settings } = useOutletContext() || {};
+  const { activeTableSession, setActiveTableSession, setSelectedTable } = useCart();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeCategory = searchParams.get('category') || '';
 
@@ -15,6 +20,26 @@ export default function Menu() {
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [openTableBill, setOpenTableBill] = useState(null);
+
+  useEffect(() => {
+    if (!activeTableSession?.sessionId || !activeTableSession?.accessToken) {
+      setOpenTableBill(null);
+      return;
+    }
+    let active = true;
+    tableService.getGuestSession(activeTableSession.sessionId, activeTableSession.accessToken)
+      .then((bill) => active && setOpenTableBill(bill))
+      .catch((err) => {
+        if (err.response?.status === 404 && active) {
+          setActiveTableSession(null);
+          setSelectedTable(null);
+          setOpenTableBill(null);
+          toast('That table session has closed. Choose an available table to start a new order.');
+        }
+      });
+    return () => { active = false; };
+  }, [activeTableSession?.sessionId, activeTableSession?.accessToken]);
 
   // Debounce search input (300ms)
   useEffect(() => {
@@ -60,6 +85,16 @@ export default function Menu() {
           {activeCategoryName ? `Showing: ${activeCategoryName}` : 'Browse everything we offer'}
         </p>
       </div>
+
+      {activeTableSession && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-brand-50 p-4">
+          <div>
+            <p className="flex items-center gap-2 text-sm font-bold text-brand-900"><FiClock /> Your table is open · {formatTableLabel(activeTableSession.table)}</p>
+            <p className="mt-1 text-xs text-brand-800">Add dishes whenever you like. They will be added to this table's running bill and paid together when you leave.</p>
+          </div>
+          {openTableBill && <div className="rounded-xl bg-white px-4 py-2 text-right shadow-sm"><p className="text-[11px] font-medium text-gray-500">Current table bill</p><p className="text-lg font-bold text-ink-900">{formatMoney(openTableBill.totalAmount, settings?.currency)}</p></div>}
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative mb-5 max-w-md">

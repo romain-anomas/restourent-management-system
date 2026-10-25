@@ -25,6 +25,7 @@ async function createTestOrder() {
       customerName: 'Invoice Test Customer',
       customerPhone: '0780000002',
       items: [{ productId: product.id, quantity: 1 }],
+      paymentMethod: 'momo',
     });
   return res.body.data.id;
 }

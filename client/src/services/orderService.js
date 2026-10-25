@@ -6,6 +6,11 @@ export const orderService = {
     return data.data;
   },
 
+  async createManual(payload) {
+    const { data } = await api.post('/orders/manual', payload);
+    return data.data;
+  },
+
   async trackByNumber(orderNumber) {
     const { data } = await api.get(`/orders/track/${orderNumber}`);
     return data.data;
@@ -23,6 +28,11 @@ export const orderService = {
 
   async updateStatus(id, status, note) {
     const { data } = await api.put(`/orders/${id}/status`, { status, note });
+    return data;
+  },
+
+  async updatePaymentStatus(id, paymentStatus) {
+    const { data } = await api.patch(`/orders/${id}/payment-status`, { paymentStatus });
     return data;
   },
 };

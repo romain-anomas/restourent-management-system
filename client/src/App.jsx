@@ -14,6 +14,7 @@ import Checkout from './pages/public/Checkout';
 import OrderConfirmation from './pages/public/OrderConfirmation';
 import About from './pages/public/About';
 import Contact from './pages/public/Contact';
+import Seating from './pages/public/Seating';
 import Login from './pages/Login';
 import NotFound from './pages/NotFound';
 import Profile from './pages/Profile';
@@ -33,6 +34,7 @@ import AdminReports from './pages/admin/AdminReports';
 import AdminExpenses from './pages/admin/AdminExpenses';
 import AdminNotifications from './pages/admin/AdminNotifications';
 import AdminSettings from './pages/admin/AdminSettings';
+import AdminTables from './pages/admin/AdminTables';
 
 // Worker
 import WorkerLayout from './layouts/WorkerLayout';
@@ -41,6 +43,7 @@ import WorkerOrders from './pages/worker/WorkerOrders';
 import WorkerInventory from './pages/worker/WorkerInventory';
 import WorkerStockTaking from './pages/worker/WorkerStockTaking';
 import WorkerActivity from './pages/worker/WorkerActivity';
+import WorkerTables from './pages/worker/WorkerTables';
 
 export default function App() {
   return (
@@ -58,6 +61,7 @@ export default function App() {
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/order-confirmation/:id" element={<OrderConfirmation />} />
             <Route path="/contact" element={<Contact />} />
+            <Route path="/seating" element={<Seating />} />
           </Route>
 
           {/* ---------- Auth ---------- */}
@@ -74,6 +78,7 @@ export default function App() {
           >
             <Route index element={<AdminDashboard />} />
             <Route path="orders" element={<AdminOrders />} />
+            <Route path="tables" element={<AdminTables />} />
             <Route path="products" element={<AdminProducts />} />
             <Route path="categories" element={<AdminCategories />} />
             <Route path="inventory" element={<AdminInventory />} />
@@ -99,6 +104,7 @@ export default function App() {
           >
             <Route index element={<WorkerDashboard />} />
             <Route path="orders" element={<WorkerOrders />} />
+            <Route path="tables" element={<WorkerTables />} />
             <Route path="inventory" element={<WorkerInventory />} />
             <Route path="stock-taking" element={<WorkerStockTaking />} />
             <Route path="activity" element={<WorkerActivity />} />

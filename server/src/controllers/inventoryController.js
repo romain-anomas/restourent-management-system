@@ -48,145 +48,179 @@ const listTransactions = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/inventory/stock-in - admin only.
- * Body: { productId, quantity, unitCost?, supplier?, reference?, notes? }
+ * Body: { items: [{productId, quantity, unitCost?}], supplier?, reference?, notes? }
+ * Records one delivery/purchase covering multiple products at once - all
+ * items succeed or fail together (single transaction), and share the same
+ * supplier/reference/notes since they typically come from one invoice.
  */
 const stockIn = asyncHandler(async (req, res) => {
-  const { productId, quantity, unitCost, supplier, reference, notes } = req.body;
-  const qty = Number(quantity);
+  const { items, supplier, reference, notes } = req.body;
 
-  if (!productId || !qty || qty <= 0) {
-    throw new ApiError(400, 'Product and a positive quantity are required.');
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new ApiError(400, 'Add at least one product.');
   }
 
-  const result = await withTransaction(async (conn) => {
-    const [rows] = await conn.query('SELECT id, name, current_stock FROM products WHERE id = ? FOR UPDATE', [productId]);
-    const product = rows[0];
-    if (!product) throw new ApiError(404, 'Product not found.');
+  const results = await withTransaction(async (conn) => {
+    const out = [];
+    for (const item of items) {
+      const qty = Number(item.quantity);
+      if (!item.productId || !qty || qty <= 0) {
+        throw new ApiError(400, 'Every item needs a product and a positive quantity.');
+      }
 
-    const previousStock = Number(product.current_stock);
-    const newStock = previousStock + qty;
+      const [rows] = await conn.query(
+        'SELECT id, name, current_stock FROM products WHERE id = ? FOR UPDATE',
+        [item.productId]
+      );
+      const product = rows[0];
+      if (!product) throw new ApiError(404, `Product #${item.productId} not found.`);
 
-    await conn.query('UPDATE products SET current_stock = ? WHERE id = ?', [newStock, productId]);
-    await conn.query(
-      `INSERT INTO inventory_transactions
-        (product_id, type, quantity, previous_stock, new_stock, unit_cost, supplier, reference, notes, created_by)
-       VALUES (?, 'stock_in', ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [productId, qty, previousStock, newStock, unitCost || null, supplier || null, reference || null, notes || null, req.user.id]
-    );
+      const previousStock = Number(product.current_stock);
+      const newStock = previousStock + qty;
 
-    return { productName: product.name, newStock };
+      await conn.query('UPDATE products SET current_stock = ? WHERE id = ?', [newStock, product.id]);
+      await conn.query(
+        `INSERT INTO inventory_transactions
+          (product_id, type, quantity, previous_stock, new_stock, unit_cost, supplier, reference, notes, created_by)
+         VALUES (?, 'stock_in', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          product.id, qty, previousStock, newStock, item.unitCost || null,
+          supplier || null, reference || null, notes || null, req.user.id,
+        ]
+      );
+
+      out.push({ productId: product.id, productName: product.name, newStock });
+    }
+    return out;
   });
 
   await logActivity({
     userId: req.user.id,
     action: 'stock_in',
-    description: `Stocked in ${qty} of "${result.productName}"`,
+    description: `Stocked in ${results.length} product(s): ${results.map((r) => r.productName).join(', ')}`,
     relatedType: 'product',
-    relatedId: Number(productId),
   });
 
-  res.status(201).json({ success: true, message: 'Stock in recorded.', data: { newStock: result.newStock } });
+  res.status(201).json({ success: true, message: `Stock in recorded for ${results.length} product(s).`, data: results });
 });
 
 /**
  * POST /api/inventory/stock-out - admin only.
- * Body: { productId, quantity, reason?, notes? }
- * Respects the product's allow_negative_stock flag.
+ * Body: { items: [{productId, quantity}], reason?, notes? }
+ * Respects each product's allow_negative_stock flag. All items succeed or
+ * fail together.
  */
 const stockOut = asyncHandler(async (req, res) => {
-  const { productId, quantity, reason, notes } = req.body;
-  const qty = Number(quantity);
+  const { items, reason, notes } = req.body;
 
-  if (!productId || !qty || qty <= 0) {
-    throw new ApiError(400, 'Product and a positive quantity are required.');
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new ApiError(400, 'Add at least one product.');
   }
 
-  const result = await withTransaction(async (conn) => {
-    const [rows] = await conn.query(
-      'SELECT id, name, current_stock, allow_negative_stock FROM products WHERE id = ? FOR UPDATE',
-      [productId]
-    );
-    const product = rows[0];
-    if (!product) throw new ApiError(404, 'Product not found.');
+  const results = await withTransaction(async (conn) => {
+    const out = [];
+    for (const item of items) {
+      const qty = Number(item.quantity);
+      if (!item.productId || !qty || qty <= 0) {
+        throw new ApiError(400, 'Every item needs a product and a positive quantity.');
+      }
 
-    const previousStock = Number(product.current_stock);
-    const newStock = previousStock - qty;
+      const [rows] = await conn.query(
+        'SELECT id, name, current_stock, allow_negative_stock FROM products WHERE id = ? FOR UPDATE',
+        [item.productId]
+      );
+      const product = rows[0];
+      if (!product) throw new ApiError(404, `Product #${item.productId} not found.`);
 
-    if (newStock < 0 && !product.allow_negative_stock) {
-      throw new ApiError(409, `Not enough stock for "${product.name}" (have ${previousStock}, requested ${qty}).`);
+      const previousStock = Number(product.current_stock);
+      const newStock = previousStock - qty;
+
+      if (newStock < 0 && !product.allow_negative_stock) {
+        throw new ApiError(409, `Not enough stock for "${product.name}" (have ${previousStock}, requested ${qty}).`);
+      }
+
+      await conn.query('UPDATE products SET current_stock = ? WHERE id = ?', [newStock, product.id]);
+      await conn.query(
+        `INSERT INTO inventory_transactions
+          (product_id, type, quantity, previous_stock, new_stock, reason, notes, created_by)
+         VALUES (?, 'stock_out', ?, ?, ?, ?, ?, ?)`,
+        [product.id, qty, previousStock, newStock, reason || null, notes || null, req.user.id]
+      );
+
+      out.push({ productId: product.id, productName: product.name, newStock });
     }
-
-    await conn.query('UPDATE products SET current_stock = ? WHERE id = ?', [newStock, productId]);
-    await conn.query(
-      `INSERT INTO inventory_transactions
-        (product_id, type, quantity, previous_stock, new_stock, reason, notes, created_by)
-       VALUES (?, 'stock_out', ?, ?, ?, ?, ?, ?)`,
-      [productId, qty, previousStock, newStock, reason || null, notes || null, req.user.id]
-    );
-
-    return { productName: product.name, newStock };
+    return out;
   });
 
   await logActivity({
     userId: req.user.id,
     action: 'stock_out',
-    description: `Stocked out ${qty} of "${result.productName}"${reason ? ` - ${reason}` : ''}`,
+    description: `Stocked out ${results.length} product(s)${reason ? ` - ${reason}` : ''}: ${results.map((r) => r.productName).join(', ')}`,
     relatedType: 'product',
-    relatedId: Number(productId),
   });
 
-  res.status(201).json({ success: true, message: 'Stock out recorded.', data: { newStock: result.newStock } });
+  res.status(201).json({ success: true, message: `Stock out recorded for ${results.length} product(s).`, data: results });
 });
 
 /**
  * POST /api/inventory/adjustment - admin only.
- * Body: { productId, newQuantity, reason }
- * Sets stock to an exact new value (e.g. after a physical stock count),
- * always with a required reason and a full transaction record.
+ * Body: { items: [{productId, newQuantity}], reason }
+ * Sets stock to an exact new value per product (e.g. after a physical
+ * stock count covering many products at once), always with a required
+ * shared reason and a full transaction record per product.
  */
 const stockAdjustment = asyncHandler(async (req, res) => {
-  const { productId, newQuantity, reason } = req.body;
+  const { items, reason } = req.body;
 
-  if (!productId || newQuantity === undefined || newQuantity === null) {
-    throw new ApiError(400, 'Product and new quantity are required.');
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new ApiError(400, 'Add at least one product.');
   }
   if (!reason?.trim()) {
     throw new ApiError(400, 'A reason is required for stock adjustments.');
   }
 
-  const newStockValue = Number(newQuantity);
-  if (newStockValue < 0) {
-    throw new ApiError(400, 'New quantity cannot be negative.');
-  }
+  const results = await withTransaction(async (conn) => {
+    const out = [];
+    for (const item of items) {
+      if (!item.productId || item.newQuantity === undefined || item.newQuantity === null) {
+        throw new ApiError(400, 'Every item needs a product and a new quantity.');
+      }
+      const newStockValue = Number(item.newQuantity);
+      if (newStockValue < 0) {
+        throw new ApiError(400, 'New quantity cannot be negative.');
+      }
 
-  const result = await withTransaction(async (conn) => {
-    const [rows] = await conn.query('SELECT id, name, current_stock FROM products WHERE id = ? FOR UPDATE', [productId]);
-    const product = rows[0];
-    if (!product) throw new ApiError(404, 'Product not found.');
+      const [rows] = await conn.query(
+        'SELECT id, name, current_stock FROM products WHERE id = ? FOR UPDATE',
+        [item.productId]
+      );
+      const product = rows[0];
+      if (!product) throw new ApiError(404, `Product #${item.productId} not found.`);
 
-    const previousStock = Number(product.current_stock);
-    const diff = newStockValue - previousStock;
+      const previousStock = Number(product.current_stock);
+      const diff = newStockValue - previousStock;
 
-    await conn.query('UPDATE products SET current_stock = ? WHERE id = ?', [newStockValue, productId]);
-    await conn.query(
-      `INSERT INTO inventory_transactions
-        (product_id, type, quantity, previous_stock, new_stock, reason, created_by)
-       VALUES (?, 'adjustment', ?, ?, ?, ?, ?)`,
-      [productId, diff, previousStock, newStockValue, reason.trim(), req.user.id]
-    );
+      await conn.query('UPDATE products SET current_stock = ? WHERE id = ?', [newStockValue, product.id]);
+      await conn.query(
+        `INSERT INTO inventory_transactions
+          (product_id, type, quantity, previous_stock, new_stock, reason, created_by)
+         VALUES (?, 'adjustment', ?, ?, ?, ?, ?)`,
+        [product.id, diff, previousStock, newStockValue, reason.trim(), req.user.id]
+      );
 
-    return { productName: product.name };
+      out.push({ productId: product.id, productName: product.name, newStock: newStockValue });
+    }
+    return out;
   });
 
   await logActivity({
     userId: req.user.id,
     action: 'stock_adjustment',
-    description: `Adjusted stock for "${result.productName}" - ${reason}`,
+    description: `Adjusted stock for ${results.length} product(s) - ${reason}: ${results.map((r) => r.productName).join(', ')}`,
     relatedType: 'product',
-    relatedId: Number(productId),
   });
 
-  res.status(201).json({ success: true, message: 'Stock adjustment recorded.' });
+  res.status(201).json({ success: true, message: `Stock adjustment recorded for ${results.length} product(s).`, data: results });
 });
 
 module.exports = { listTransactions, stockIn, stockOut, stockAdjustment };
